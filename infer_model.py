@@ -317,7 +317,7 @@ def load_qwen_weights(
     return model, config
 
 
-def generate_text(
+def generate_tokens(
     model: QwenForCausalLM,
     token_ids: torch.Tensor,
     max_new_tokens: int = 50,
@@ -345,6 +345,26 @@ def generate_text(
     return tokens[0, original_length:]
 
 
+def generate_text(
+    model: QwenForCausalLM,
+    tokenizer: Any,
+    text: str,
+    max_new_tokens: int = 50,
+    temperature: float = 0.7,
+) -> str:
+    """Generate text from string input and return string output."""
+    # Tokenize the input text
+    token_ids = tokenizer.encode(text, return_tensors="pt")
+
+    # Generate tokens
+    generated_tokens = generate_tokens(
+        model, token_ids, max_new_tokens, temperature, tokenizer.eos_token_id
+    )
+
+    # Decode and return string
+    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+
 if __name__ == "__main__":
     from transformers import AutoTokenizer
 
@@ -359,13 +379,11 @@ if __name__ == "__main__":
     prompt = "What is your favorite color?"
     print(f"Prompt: {prompt}")
 
-    # Apply chat template and tokenize
+    # Apply chat template
     messages = [{"role": "user", "content": prompt}]
     text = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    token_ids = tokenizer.encode(text, return_tensors="pt")
 
-    generated_tokens = generate_text(model, token_ids, eos_token_id=config.eos_token_id)
-    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    response = generate_text(model, tokenizer, text)
     print(f"Response: {response}")
