@@ -65,7 +65,6 @@ def apply_rotary_pos_emb(
     k: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
-    position_ids: Optional[torch.Tensor] = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Applies rotary position embedding to query and key tensors."""
     cos = cos.unsqueeze(0).unsqueeze(0)
@@ -112,7 +111,6 @@ class QwenAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         bsz, q_len, _ = hidden_states.size()
 
@@ -132,7 +130,7 @@ class QwenAttention(nn.Module):
 
         cos, sin = self.rotary_emb(value_states, seq_len=q_len)
         query_states, key_states = apply_rotary_pos_emb(
-            query_states, key_states, cos, sin, position_ids
+            query_states, key_states, cos, sin
         )
 
         # Repeat key and value states for GQA
@@ -196,11 +194,10 @@ class QwenDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states = self.self_attn(hidden_states, attention_mask, position_ids)
+        hidden_states = self.self_attn(hidden_states, attention_mask)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -232,13 +229,8 @@ class QwenModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[1]
-        if position_ids is None:
-            device = input_ids.device
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
 
         inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
@@ -254,7 +246,7 @@ class QwenModel(nn.Module):
             attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
 
         for decoder_layer in self.layers:
-            hidden_states = decoder_layer(hidden_states, attention_mask, position_ids)
+            hidden_states = decoder_layer(hidden_states, attention_mask)
 
         hidden_states = self.norm(hidden_states)
         return hidden_states
@@ -276,9 +268,8 @@ class QwenForCausalLM(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        outputs = self.model(input_ids, attention_mask, position_ids)
+        outputs = self.model(input_ids, attention_mask)
         logits = self.lm_head(outputs)
         return logits
 
