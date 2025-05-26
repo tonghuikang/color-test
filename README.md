@@ -1,6 +1,6 @@
 # color-test
 
-Setup
+## Setup
 
 ```
 uv sync
@@ -12,3 +12,7 @@ For notebook
 - Kernel -> Change kernel -> ipykernel
 - Test with `import sys; print(sys.executable)`
 
+
+## References
+
+- https://github.com/karpathy/build-nanogpt/blob/master/train_gpt2.py
