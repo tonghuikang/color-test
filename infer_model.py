@@ -213,10 +213,9 @@ def load_qwen_weights(model_dir):
     from safetensors.torch import load_file
     state_dict = load_file(model_dir / "model.safetensors")
     
-    # Debug: print some keys to understand structure
-    print("Sample state dict keys:")
-    for i, key in enumerate(list(state_dict.keys())[:10]):
-        print(f"  {key}: {state_dict[key].shape}")
+    # Add tied weight if missing to avoid warning
+    if config.tie_word_embeddings and 'lm_head.weight' not in state_dict:
+        state_dict['lm_head.weight'] = state_dict['model.embed_tokens.weight']
     
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     if missing_keys:
