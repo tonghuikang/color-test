@@ -319,21 +319,15 @@ def load_qwen_weights(
 
 def generate_text(
     model: QwenForCausalLM,
-    tokenizer: Any,
-    prompt: str,
+    token_ids: torch.Tensor,
     max_new_tokens: int = 50,
     temperature: float = 0.7,
-) -> str:
+    eos_token_id: Optional[int] = None,
+) -> torch.Tensor:
     """Generate text using the model."""
     model.eval()
 
-    # Apply chat template
-    messages = [{"role": "user", "content": prompt}]
-    text = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-    tokens = tokenizer.encode(text, return_tensors="pt")
-
+    tokens = token_ids.clone()
     original_length = tokens.shape[1]
 
     with torch.no_grad():
@@ -344,12 +338,11 @@ def generate_text(
             next_token = torch.multinomial(probs, num_samples=1)
             tokens = torch.cat([tokens, next_token.unsqueeze(0)], dim=1)
 
-            if next_token.item() == tokenizer.eos_token_id:
+            if eos_token_id is not None and next_token.item() == eos_token_id:
                 break
 
-    # Decode only the generated part
-    generated_tokens = tokens[0, original_length:]
-    return tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    # Return only the generated part
+    return tokens[0, original_length:]
 
 
 if __name__ == "__main__":
@@ -363,8 +356,16 @@ if __name__ == "__main__":
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
 
-    prompt = "What is the capital of France?"
+    prompt = "What is your favorite color?"
     print(f"Prompt: {prompt}")
 
-    response = generate_text(model, tokenizer, prompt)
+    # Apply chat template and tokenize
+    messages = [{"role": "user", "content": prompt}]
+    text = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+    token_ids = tokenizer.encode(text, return_tensors="pt")
+
+    generated_tokens = generate_text(model, token_ids, eos_token_id=config.eos_token_id)
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     print(f"Response: {response}")
