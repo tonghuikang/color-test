@@ -110,7 +110,7 @@ class QwenAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         bsz, q_len, _ = hidden_states.size()
 
@@ -145,8 +145,7 @@ class QwenAttention(nn.Module):
             query_states, key_states.transpose(2, 3)
         ) / math.sqrt(self.head_dim)
 
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+        attn_weights = attn_weights + attention_mask
 
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
             query_states.dtype
@@ -193,7 +192,7 @@ class QwenDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -228,22 +227,16 @@ class QwenModel(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[1]
 
         inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
 
-        if attention_mask is None:
-            attention_mask = torch.triu(
-                torch.ones((seq_length, seq_length)), diagonal=1
-            )
-            attention_mask = attention_mask.to(device=hidden_states.device)
-            attention_mask = attention_mask.masked_fill(
-                attention_mask == 1, float("-inf")
-            )
-            attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
+        attention_mask = torch.triu(torch.ones((seq_length, seq_length)), diagonal=1)
+        attention_mask = attention_mask.to(device=hidden_states.device)
+        attention_mask = attention_mask.masked_fill(attention_mask == 1, float("-inf"))
+        attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
 
         for decoder_layer in self.layers:
             hidden_states = decoder_layer(hidden_states, attention_mask)
@@ -267,9 +260,8 @@ class QwenForCausalLM(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        outputs = self.model(input_ids, attention_mask)
+        outputs = self.model(input_ids)
         logits = self.lm_head(outputs)
         return logits
 
