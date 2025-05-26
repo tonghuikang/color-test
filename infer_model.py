@@ -1,24 +1,38 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from __future__ import annotations
+
 import json
 import math
 from pathlib import Path
+from typing import Any, Optional, Union
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, dim, eps=1e-6):
+    """RMS normalization layer."""
+
+    def __init__(self, dim: int, eps: float = 1e-6) -> None:
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         norm = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
         return x * norm * self.weight
 
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    """Rotary position embedding."""
+
+    def __init__(
+        self,
+        dim: int,
+        max_position_embeddings: int = 2048,
+        base: int = 10000,
+        device: Optional[torch.device] = None,
+    ) -> None:
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
@@ -28,22 +42,32 @@ class RotaryEmbedding(nn.Module):
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, x, seq_len=None):
+    def forward(
+        self, x: torch.Tensor, seq_len: Optional[int] = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         if seq_len is None:
             seq_len = x.shape[-2]
-        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(t, self.inv_freq)
+        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)  # type: ignore
+        freqs = torch.outer(t, self.inv_freq)  # type: ignore
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
-def rotate_half(x):
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None):
+def apply_rotary_pos_emb(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    position_ids: Optional[torch.Tensor] = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Applies rotary position embedding to query and key tensors."""
     cos = cos.unsqueeze(0).unsqueeze(0)
     sin = sin.unsqueeze(0).unsqueeze(0)
     q_embed = (q * cos) + (rotate_half(q) * sin)
@@ -52,7 +76,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None):
 
 
 class QwenAttention(nn.Module):
-    def __init__(self, config):
+    """Multi-head attention with rotary position embeddings."""
+
+    def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -82,7 +108,12 @@ class QwenAttention(nn.Module):
             base=self.rope_theta,
         )
 
-    def forward(self, hidden_states, attention_mask=None, position_ids=None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -132,7 +163,9 @@ class QwenAttention(nn.Module):
 
 
 class QwenMLP(nn.Module):
-    def __init__(self, config):
+    """MLP layer with SwiGLU activation."""
+
+    def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -142,12 +175,14 @@ class QwenMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = nn.SiLU()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 class QwenDecoderLayer(nn.Module):
-    def __init__(self, config):
+    """Transformer decoder layer."""
+
+    def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = QwenAttention(config)
@@ -157,7 +192,12 @@ class QwenDecoderLayer(nn.Module):
             config.hidden_size, eps=config.rms_norm_eps
         )
 
-    def forward(self, hidden_states, attention_mask=None, position_ids=None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.self_attn(hidden_states, attention_mask, position_ids)
@@ -172,10 +212,12 @@ class QwenDecoderLayer(nn.Module):
 
 
 class QwenModel(nn.Module):
-    def __init__(self, config):
+    """Qwen transformer model."""
+
+    def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.config = config
-        self.padding_idx = config.pad_token_id if hasattr(config, "pad_token_id") else 0
+        self.padding_idx = getattr(config, "pad_token_id", 0)
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(
@@ -186,7 +228,12 @@ class QwenModel(nn.Module):
         )
         self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, input_ids, attention_mask=None, position_ids=None):
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         seq_length = input_ids.shape[1]
         if position_ids is None:
             device = input_ids.device
@@ -214,7 +261,9 @@ class QwenModel(nn.Module):
 
 
 class QwenForCausalLM(nn.Module):
-    def __init__(self, config):
+    """Qwen model for causal language modeling."""
+
+    def __init__(self, config: ModelConfig) -> None:
         super().__init__()
         self.model = QwenModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -223,14 +272,21 @@ class QwenForCausalLM(nn.Module):
         if getattr(config, "tie_word_embeddings", True):
             self.lm_head.weight = self.model.embed_tokens.weight
 
-    def forward(self, input_ids, attention_mask=None, position_ids=None):
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         outputs = self.model(input_ids, attention_mask, position_ids)
         logits = self.lm_head(outputs)
         return logits
 
 
 class ModelConfig:
-    def __init__(self, **kwargs):
+    """Configuration class for Qwen model."""
+
+    def __init__(self, **kwargs: Any) -> None:
         self.hidden_size = kwargs.get("hidden_size", 896)
         self.num_attention_heads = kwargs.get("num_attention_heads", 14)
         self.num_hidden_layers = kwargs.get("num_hidden_layers", 24)
@@ -242,10 +298,14 @@ class ModelConfig:
         self.rope_theta = kwargs.get("rope_theta", 1000000.0)
         self.bos_token_id = kwargs.get("bos_token_id", 151643)
         self.eos_token_id = kwargs.get("eos_token_id", 151645)
+        self.pad_token_id = kwargs.get("pad_token_id", 0)
         self.tie_word_embeddings = kwargs.get("tie_word_embeddings", True)
 
 
-def load_qwen_weights(model_dir):
+def load_qwen_weights(
+    model_dir: Union[str, Path],
+) -> tuple[QwenForCausalLM, ModelConfig]:
+    """Load Qwen model weights from directory."""
     model_dir = Path(model_dir)
 
     # Load config
@@ -274,7 +334,14 @@ def load_qwen_weights(model_dir):
     return model, config
 
 
-def generate_text(model, tokenizer, prompt, max_new_tokens=50, temperature=0.7):
+def generate_text(
+    model: QwenForCausalLM,
+    tokenizer: Any,
+    prompt: str,
+    max_new_tokens: int = 50,
+    temperature: float = 0.7,
+) -> str:
+    """Generate text using the model."""
     model.eval()
 
     # Apply chat template
