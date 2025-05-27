@@ -63,7 +63,7 @@ class RotaryTransformation(nn.Module):
         Applies rotary position embedding to query and key tensors.
 
         Args:
-            query_states: Query tensor of shape (batch_size, num_heads, seq_len, head_dim)
+            query_states: Query tensor of shape (batch_size, num_attention_heads, seq_len, head_dim)
             key_states: Key tensor of shape (batch_size, num_key_value_heads, seq_len, head_dim)
 
         Returns:
@@ -128,15 +128,15 @@ class QwenAttention(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.num_key_value_groups = self.num_attention_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
 
         self.q_proj = nn.Linear(
-            self.hidden_size, self.num_heads * self.head_dim, bias=True
+            self.hidden_size, self.num_attention_heads * self.head_dim, bias=True
         )
         self.k_proj = nn.Linear(
             self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True
@@ -145,7 +145,7 @@ class QwenAttention(nn.Module):
             self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True
         )
         self.o_proj = nn.Linear(
-            self.num_heads * self.head_dim, self.hidden_size, bias=False
+            self.num_attention_heads * self.head_dim, self.hidden_size, bias=False
         )
 
         self.rotary_transformation = RotaryTransformation(
@@ -180,7 +180,7 @@ class QwenAttention(nn.Module):
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(
-            batch_size, seq_len, self.num_heads, self.head_dim
+            batch_size, seq_len, self.num_attention_heads, self.head_dim
         ).transpose(1, 2)
         key_states = key_states.view(
             batch_size, seq_len, self.num_key_value_heads, self.head_dim
@@ -192,7 +192,7 @@ class QwenAttention(nn.Module):
         # Verify shapes match config
         assert query_states.shape == (
             batch_size,
-            self.num_heads,
+            self.num_attention_heads,
             seq_len,
             self.head_dim,
         )
@@ -208,7 +208,7 @@ class QwenAttention(nn.Module):
             seq_len,
             self.head_dim,
         )
-        assert self.num_heads == self.config.num_attention_heads
+        assert self.num_attention_heads == self.config.num_attention_heads
         assert self.num_key_value_heads == self.config.num_key_value_heads
 
         query_states, key_states = self.rotary_transformation(query_states, key_states)
@@ -222,10 +222,10 @@ class QwenAttention(nn.Module):
         )
 
         # Verify GQA expansion worked correctly
-        assert key_states.shape == (batch_size, self.num_heads, seq_len, self.head_dim)
+        assert key_states.shape == (batch_size, self.num_attention_heads, seq_len, self.head_dim)
         assert value_states.shape == (
             batch_size,
-            self.num_heads,
+            self.num_attention_heads,
             seq_len,
             self.head_dim,
         )
