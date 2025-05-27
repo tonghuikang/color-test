@@ -2,3 +2,4 @@
 *.json
 *.safetensors
 *.txt
+*.pt
