@@ -30,10 +30,10 @@ class RMSNorm(nn.Module):
         assert hidden_states.size(-1) == self.weight.size(0)
 
         norm = torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.eps)
-        result = hidden_states * norm * self.weight
+        normalized_states = hidden_states * norm * self.weight
 
-        assert result.shape == hidden_states.shape
-        return result
+        assert normalized_states.shape == hidden_states.shape
+        return normalized_states
 
 
 class RotaryTransformation(nn.Module):
@@ -78,10 +78,10 @@ class RotaryTransformation(nn.Module):
         rope_angles = torch.outer(position_ids, rope_freqs)
         assert rope_angles.shape == (seq_len, self.dim // 2)
 
-        emb = torch.cat((rope_angles, rope_angles), dim=-1)
+        rope_emb = torch.cat((rope_angles, rope_angles), dim=-1)
         cos, sin = (
-            emb.cos().to(dtype=query_states.dtype),
-            emb.sin().to(dtype=query_states.dtype),
+            rope_emb.cos().to(dtype=query_states.dtype),
+            rope_emb.sin().to(dtype=query_states.dtype),
         )
 
         assert cos.shape == (seq_len, self.dim)
@@ -108,12 +108,12 @@ class RotaryTransformation(nn.Module):
         """
         assert hidden_states.shape[-1] % 2 == 0
 
-        half1 = hidden_states[..., : hidden_states.shape[-1] // 2]
-        half2 = hidden_states[..., hidden_states.shape[-1] // 2 :]
-        result = torch.cat((-half2, half1), dim=-1)
+        first_half = hidden_states[..., : hidden_states.shape[-1] // 2]
+        second_half = hidden_states[..., hidden_states.shape[-1] // 2 :]
+        rotated_states = torch.cat((-second_half, first_half), dim=-1)
 
-        assert result.shape == hidden_states.shape
-        return result
+        assert rotated_states.shape == hidden_states.shape
+        return rotated_states
 
 
 class QwenAttention(nn.Module):
@@ -281,10 +281,10 @@ class QwenMLP(nn.Module):
             self.config.intermediate_size,
         )
 
-        result = self.down_proj(self.act_fn(gate_out) * up_out)
+        mlp_output = self.down_proj(self.act_fn(gate_out) * up_out)
 
-        assert result.shape == hidden_states.shape
-        return result
+        assert mlp_output.shape == hidden_states.shape
+        return mlp_output
 
 
 class QwenDecoderLayer(nn.Module):
