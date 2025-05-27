@@ -36,7 +36,7 @@ class RMSNorm(nn.Module):
         return result
 
 
-class RotaryProjection(nn.Module):
+class RotaryTransformation(nn.Module):
     """Rotary projection."""
 
     def __init__(
@@ -153,7 +153,7 @@ class QwenAttention(nn.Module):
             self.num_heads * self.head_dim, self.hidden_size, bias=False
         )
 
-        self.rotary_proj = RotaryProjection(
+        self.rotary_transformation = RotaryTransformation(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
             base=self.rope_theta,
@@ -216,7 +216,7 @@ class QwenAttention(nn.Module):
         assert self.num_heads == self.config.num_attention_heads
         assert self.num_key_value_heads == self.config.num_key_value_heads
 
-        query_states, key_states = self.rotary_proj(
+        query_states, key_states = self.rotary_transformation(
             query_states, key_states, seq_len=seq_len
         )
 
