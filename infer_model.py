@@ -18,21 +18,21 @@ class RMSNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Input tensor of shape (batch_size, seq_len, dim)
+            hidden_states: Input tensor of shape (batch_size, seq_len, dim)
         
         Returns:
             Normalized tensor of shape (batch_size, seq_len, dim)
         """
-        assert x.dim() == 3
-        assert x.size(-1) == self.weight.size(0)
+        assert hidden_states.dim() == 3
+        assert hidden_states.size(-1) == self.weight.size(0)
         
-        norm = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        result = x * norm * self.weight
+        norm = torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.eps)
+        result = hidden_states * norm * self.weight
         
-        assert result.shape == x.shape
+        assert result.shape == hidden_states.shape
         return result
 
 
@@ -56,53 +56,53 @@ class RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(
-        self, x: torch.Tensor, seq_len: Optional[int] = None
+        self, hidden_states: torch.Tensor, seq_len: Optional[int] = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
-            x: Input tensor of shape (batch_size, num_heads, seq_len, head_dim)
+            hidden_states: Input tensor of shape (batch_size, num_heads, seq_len, head_dim)
             seq_len: Optional sequence length override
         
         Returns:
             Tuple of (cos, sin) tensors of shape (seq_len, dim)
         """
-        assert x.dim() == 4
+        assert hidden_states.dim() == 4
         
         if seq_len is None:
-            seq_len = x.shape[-2]
-        t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq.dtype)  # type: ignore
+            seq_len = hidden_states.shape[-2]
+        t = torch.arange(seq_len, device=hidden_states.device, dtype=self.inv_freq.dtype)  # type: ignore
         freqs = torch.outer(t, self.inv_freq)  # type: ignore
         emb = torch.cat((freqs, freqs), dim=-1)
-        cos, sin = emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
+        cos, sin = emb.cos().to(dtype=hidden_states.dtype), emb.sin().to(dtype=hidden_states.dtype)
         
         assert cos.shape == (seq_len, self.dim)
         assert sin.shape == (seq_len, self.dim)
         return cos, sin
 
 
-def rotate_half(x: torch.Tensor) -> torch.Tensor:
+def rotate_half(hidden_states: torch.Tensor) -> torch.Tensor:
     """
     Rotates half the hidden dims of the input.
     
     Args:
-        x: Input tensor of shape (..., head_dim)
+        hidden_states: Input tensor of shape (..., head_dim)
     
     Returns:
         Rotated tensor of shape (..., head_dim)
     """
-    assert x.shape[-1] % 2 == 0
+    assert hidden_states.shape[-1] % 2 == 0
     
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    result = torch.cat((-x2, x1), dim=-1)
+    half1 = hidden_states[..., : hidden_states.shape[-1] // 2]
+    half2 = hidden_states[..., hidden_states.shape[-1] // 2 :]
+    result = torch.cat((-half2, half1), dim=-1)
     
-    assert result.shape == x.shape
+    assert result.shape == hidden_states.shape
     return result
 
 
 def apply_rotary_pos_emb(
-    q: torch.Tensor,
-    k: torch.Tensor,
+    query_states: torch.Tensor,
+    key_states: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -110,25 +110,25 @@ def apply_rotary_pos_emb(
     Applies rotary position embedding to query and key tensors.
     
     Args:
-        q: Query tensor of shape (batch_size, num_heads, seq_len, head_dim)
-        k: Key tensor of shape (batch_size, num_key_value_heads, seq_len, head_dim)
+        query_states: Query tensor of shape (batch_size, num_heads, seq_len, head_dim)
+        key_states: Key tensor of shape (batch_size, num_key_value_heads, seq_len, head_dim)
         cos: Cosine tensor of shape (seq_len, head_dim)
         sin: Sine tensor of shape (seq_len, head_dim)
     
     Returns:
-        Tuple of (q_embed, k_embed) with same shapes as input q and k
+        Tuple of (query_embed, key_embed) with same shapes as input query and key
     """
-    assert q.shape[-1] == cos.shape[-1]
-    assert k.shape[-1] == cos.shape[-1]
+    assert query_states.shape[-1] == cos.shape[-1]
+    assert key_states.shape[-1] == cos.shape[-1]
     
     cos = cos.unsqueeze(0).unsqueeze(0)
     sin = sin.unsqueeze(0).unsqueeze(0)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    query_embed = (query_states * cos) + (rotate_half(query_states) * sin)
+    key_embed = (key_states * cos) + (rotate_half(key_states) * sin)
     
-    assert q_embed.shape == q.shape
-    assert k_embed.shape == k.shape
-    return q_embed, k_embed
+    assert query_embed.shape == query_states.shape
+    assert key_embed.shape == key_states.shape
+    return query_embed, key_embed
 
 
 class QwenAttention(nn.Module):
@@ -180,33 +180,33 @@ class QwenAttention(nn.Module):
         assert hidden_states.dim() == 3
         assert attention_mask.dim() == 4
         
-        batch_size, q_len, _ = hidden_states.size()
+        batch_size, seq_len, _ = hidden_states.size()
         assert hidden_states.size(-1) == self.hidden_size
         assert hidden_states.size(-1) == self.config.hidden_size
-        assert attention_mask.shape[-2:] == (q_len, q_len)
+        assert attention_mask.shape[-2:] == (seq_len, seq_len)
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
         query_states = query_states.view(
-            batch_size, q_len, self.num_heads, self.head_dim
+            batch_size, seq_len, self.num_heads, self.head_dim
         ).transpose(1, 2)
         key_states = key_states.view(
-            batch_size, q_len, self.num_key_value_heads, self.head_dim
+            batch_size, seq_len, self.num_key_value_heads, self.head_dim
         ).transpose(1, 2)
         value_states = value_states.view(
-            batch_size, q_len, self.num_key_value_heads, self.head_dim
+            batch_size, seq_len, self.num_key_value_heads, self.head_dim
         ).transpose(1, 2)
         
         # Verify shapes match config
-        assert query_states.shape == (batch_size, self.num_heads, q_len, self.head_dim)
-        assert key_states.shape == (batch_size, self.num_key_value_heads, q_len, self.head_dim)
-        assert value_states.shape == (batch_size, self.num_key_value_heads, q_len, self.head_dim)
+        assert query_states.shape == (batch_size, self.num_heads, seq_len, self.head_dim)
+        assert key_states.shape == (batch_size, self.num_key_value_heads, seq_len, self.head_dim)
+        assert value_states.shape == (batch_size, self.num_key_value_heads, seq_len, self.head_dim)
         assert self.num_heads == self.config.num_attention_heads
         assert self.num_key_value_heads == self.config.num_key_value_heads
 
-        cos, sin = self.rotary_emb(value_states, seq_len=q_len)
+        cos, sin = self.rotary_emb(value_states, seq_len=seq_len)
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin
         )
@@ -220,8 +220,8 @@ class QwenAttention(nn.Module):
         )
         
         # Verify GQA expansion worked correctly
-        assert key_states.shape == (batch_size, self.num_heads, q_len, self.head_dim)
-        assert value_states.shape == (batch_size, self.num_heads, q_len, self.head_dim)
+        assert key_states.shape == (batch_size, self.num_heads, seq_len, self.head_dim)
+        assert value_states.shape == (batch_size, self.num_heads, seq_len, self.head_dim)
 
         attn_weights = torch.matmul(
             query_states, key_states.transpose(2, 3)
@@ -235,10 +235,10 @@ class QwenAttention(nn.Module):
         attn_output = torch.matmul(attn_weights, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, q_len, self.hidden_size)
+        attn_output = attn_output.reshape(batch_size, seq_len, self.hidden_size)
         attn_output = self.o_proj(attn_output)
         
-        assert attn_output.shape == (batch_size, q_len, self.config.hidden_size)
+        assert attn_output.shape == (batch_size, seq_len, self.config.hidden_size)
         return attn_output
 
 
@@ -255,27 +255,27 @@ class QwenMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = nn.SiLU()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            x: Input tensor of shape (batch_size, seq_len, hidden_size)
+            hidden_states: Input tensor of shape (batch_size, seq_len, hidden_size)
         
         Returns:
             Output tensor of shape (batch_size, seq_len, hidden_size)
         """
-        assert x.dim() == 3
-        assert x.size(-1) == self.hidden_size
+        assert hidden_states.dim() == 3
+        assert hidden_states.size(-1) == self.hidden_size
         assert self.hidden_size == self.config.hidden_size
         assert self.intermediate_size == self.config.intermediate_size
         
-        gate_out = self.gate_proj(x)
-        up_out = self.up_proj(x)
-        assert gate_out.shape == (*x.shape[:-1], self.config.intermediate_size)
-        assert up_out.shape == (*x.shape[:-1], self.config.intermediate_size)
+        gate_out = self.gate_proj(hidden_states)
+        up_out = self.up_proj(hidden_states)
+        assert gate_out.shape == (*hidden_states.shape[:-1], self.config.intermediate_size)
+        assert up_out.shape == (*hidden_states.shape[:-1], self.config.intermediate_size)
         
         result = self.down_proj(self.act_fn(gate_out) * up_out)
         
-        assert result.shape == x.shape
+        assert result.shape == hidden_states.shape
         return result
 
 
@@ -351,17 +351,17 @@ class QwenModel(nn.Module):
         """
         assert input_ids.dim() == 2
         
-        seq_length = input_ids.shape[1]
+        seq_len = input_ids.shape[1]
         batch_size = input_ids.shape[0]
-        assert seq_length <= self.config.max_position_embeddings
+        assert seq_len <= self.config.max_position_embeddings
 
         inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = inputs_embeds
         
-        assert inputs_embeds.shape == (batch_size, seq_length, self.config.hidden_size)
+        assert inputs_embeds.shape == (batch_size, seq_len, self.config.hidden_size)
         assert len(self.layers) == self.config.num_hidden_layers
 
-        attention_mask = torch.triu(torch.ones((seq_length, seq_length)), diagonal=1)
+        attention_mask = torch.triu(torch.ones((seq_len, seq_len)), diagonal=1)
         attention_mask = attention_mask.to(device=hidden_states.device)
         attention_mask = attention_mask.masked_fill(attention_mask == 1, float("-inf"))
         attention_mask = attention_mask.unsqueeze(0).unsqueeze(0)
@@ -371,7 +371,7 @@ class QwenModel(nn.Module):
 
         hidden_states = self.norm(hidden_states)
         
-        assert hidden_states.shape == (batch_size, seq_length, self.config.hidden_size)
+        assert hidden_states.shape == (batch_size, seq_len, self.config.hidden_size)
         return hidden_states
 
 
