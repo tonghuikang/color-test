@@ -71,14 +71,14 @@ class RotaryTransformation(nn.Module):
 
         seq_len = query_states.shape[-2]
 
-        inv_freq = 1.0 / (
+        rope_freqs = 1.0 / (
             self.rope_theta ** (torch.arange(0, self.dim, 2, device=query_states.device).float() / self.dim)
         )
-        position_ids = torch.arange(seq_len, device=query_states.device, dtype=inv_freq.dtype)
-        freqs = torch.outer(position_ids, inv_freq)
-        assert freqs.shape == (seq_len, self.dim // 2)
+        position_ids = torch.arange(seq_len, device=query_states.device, dtype=rope_freqs.dtype)
+        rope_angles = torch.outer(position_ids, rope_freqs)
+        assert rope_angles.shape == (seq_len, self.dim // 2)
 
-        emb = torch.cat((freqs, freqs), dim=-1)
+        emb = torch.cat((rope_angles, rope_angles), dim=-1)
         cos, sin = (
             emb.cos().to(dtype=query_states.dtype),
             emb.sin().to(dtype=query_states.dtype),
