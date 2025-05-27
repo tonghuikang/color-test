@@ -42,17 +42,13 @@ class RotaryTransformation(nn.Module):
     def __init__(
         self,
         dim: int,
-        max_position_embeddings: int = 2048,
-        base: int = 10000,
+        max_position_embeddings: int,
+        rope_theta: int,
     ) -> None:
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2).float() / self.dim)
-        )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.rope_theta = rope_theta
 
     def forward(
         self,
@@ -75,14 +71,13 @@ class RotaryTransformation(nn.Module):
 
         seq_len = query_states.shape[-2]
 
-        t = torch.arange(
-            seq_len,
-            device=query_states.device,
-            dtype=torch.float32
-            if self.inv_freq.dtype == torch.float32
-            else torch.float64,
+        inv_freq = 1.0 / (
+            self.rope_theta ** (torch.arange(0, self.dim, 2, device=query_states.device).float() / self.dim)
         )
-        freqs = torch.outer(t, self.inv_freq)  # type: ignore
+        position_ids = torch.arange(seq_len, device=query_states.device, dtype=inv_freq.dtype)
+        freqs = torch.outer(position_ids, inv_freq)
+        assert freqs.shape == (seq_len, self.dim // 2)
+
         emb = torch.cat((freqs, freqs), dim=-1)
         cos, sin = (
             emb.cos().to(dtype=query_states.dtype),
@@ -151,7 +146,7 @@ class QwenAttention(nn.Module):
         self.rotary_transformation = RotaryTransformation(
             self.head_dim,
             max_position_embeddings=self.max_position_embeddings,
-            base=self.rope_theta,
+            rope_theta=self.rope_theta,
         )
 
     def forward(
