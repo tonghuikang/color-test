@@ -42,7 +42,7 @@
 
 ## Testing
 
-- Modifications to `infer_model.py` test with `uv run python3 infer_model.py` before reporting success
+- Modifications to Python files should be tested with `uv run python3 {file.py}` before reporting success
 
 
 ## Tools
