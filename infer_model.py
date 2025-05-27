@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from prompts import default_test_prompt
+
 
 class RMSNorm(nn.Module):
     """RMS normalization layer."""
@@ -72,9 +74,15 @@ class RotaryTransformation(nn.Module):
         seq_len = query_states.shape[-2]
 
         rope_freqs = 1.0 / (
-            self.rope_theta ** (torch.arange(0, self.dim, 2, device=query_states.device).float() / self.dim)
+            self.rope_theta
+            ** (
+                torch.arange(0, self.dim, 2, device=query_states.device).float()
+                / self.dim
+            )
         )
-        position_ids = torch.arange(seq_len, device=query_states.device, dtype=rope_freqs.dtype)
+        position_ids = torch.arange(
+            seq_len, device=query_states.device, dtype=rope_freqs.dtype
+        )
         rope_angles = torch.outer(position_ids, rope_freqs)
         assert rope_angles.shape == (seq_len, self.dim // 2)
 
@@ -217,7 +225,12 @@ class QwenAttention(nn.Module):
         )
 
         # Verify GQA expansion worked correctly
-        assert key_states.shape == (batch_size, self.num_attention_heads, seq_len, self.head_dim)
+        assert key_states.shape == (
+            batch_size,
+            self.num_attention_heads,
+            seq_len,
+            self.head_dim,
+        )
         assert value_states.shape == (
             batch_size,
             self.num_attention_heads,
@@ -555,19 +568,10 @@ if __name__ == "__main__":
     model_dir = "./qwen2.5-0.5b-instruct"
 
     print("Loading model...")
-    model, config = load_qwen_weights(model_dir)
+    model, _ = load_qwen_weights(model_dir)
 
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
 
-    prompt = "What is your favorite color?"
-    print(f"Prompt: {prompt}")
-
-    # Apply chat template
-    messages = [{"role": "user", "content": prompt}]
-    text = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-
-    response = generate_text(model, tokenizer, text)
+    response = generate_text(model, tokenizer, default_test_prompt)
     print(f"Response: {response}")
