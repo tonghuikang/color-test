@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import torch
 import torch.nn as nn
@@ -44,14 +44,13 @@ class RotaryTransformation(nn.Module):
         dim: int,
         max_position_embeddings: int = 2048,
         base: int = 10000,
-        device: Optional[torch.device] = None,
     ) -> None:
         super().__init__()
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
         inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
+            self.base ** (torch.arange(0, self.dim, 2).float() / self.dim)
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
@@ -59,7 +58,6 @@ class RotaryTransformation(nn.Module):
         self,
         query_states: torch.Tensor,
         key_states: torch.Tensor,
-        seq_len: Optional[int] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Applies rotary position embedding to query and key tensors.
@@ -67,7 +65,6 @@ class RotaryTransformation(nn.Module):
         Args:
             query_states: Query tensor of shape (batch_size, num_heads, seq_len, head_dim)
             key_states: Key tensor of shape (batch_size, num_key_value_heads, seq_len, head_dim)
-            seq_len: Optional sequence length override
 
         Returns:
             Tuple of (query_embed, key_embed) with same shapes as input query and key
@@ -76,8 +73,7 @@ class RotaryTransformation(nn.Module):
         assert key_states.dim() == 4
         assert query_states.shape[-1] == key_states.shape[-1] == self.dim
 
-        if seq_len is None:
-            seq_len = query_states.shape[-2]
+        seq_len = query_states.shape[-2]
 
         t = torch.arange(
             seq_len,
@@ -104,7 +100,6 @@ class RotaryTransformation(nn.Module):
         assert query_embed.shape == query_states.shape
         assert key_embed.shape == key_states.shape
         return query_embed, key_embed
-
 
     def rotate_half(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -216,9 +211,7 @@ class QwenAttention(nn.Module):
         assert self.num_heads == self.config.num_attention_heads
         assert self.num_key_value_heads == self.config.num_key_value_heads
 
-        query_states, key_states = self.rotary_transformation(
-            query_states, key_states, seq_len=seq_len
-        )
+        query_states, key_states = self.rotary_transformation(query_states, key_states)
 
         # Repeat key and value states for GQA
         key_states = torch.repeat_interleave(
@@ -492,9 +485,9 @@ def load_qwen_weights(
 def generate_tokens(
     model: QwenForCausalLM,
     token_ids: torch.Tensor,
+    eos_token_id: int,
     max_new_tokens: int = 50,
     temperature: float = 0.7,
-    eos_token_id: Optional[int] = None,
 ) -> torch.Tensor:
     """
     Generate text using the model.
@@ -522,7 +515,7 @@ def generate_tokens(
             next_token = torch.multinomial(probs, num_samples=1)
             tokens = torch.cat([tokens, next_token.unsqueeze(0)], dim=1)
 
-            if eos_token_id is not None and next_token.item() == eos_token_id:
+            if next_token.item() == eos_token_id:
                 break
 
     # Return only the generated part
@@ -554,7 +547,7 @@ def generate_text(
 
     # Generate tokens
     generated_tokens = generate_tokens(
-        model, token_ids, max_new_tokens, temperature, tokenizer.eos_token_id
+        model, token_ids, tokenizer.eos_token_id, max_new_tokens, temperature
     )
 
     # Decode and return string

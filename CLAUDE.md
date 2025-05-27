@@ -43,3 +43,8 @@
 ## Testing
 
 - Modifications to `infer_model.py` test with `uv run python3 infer_model.py` before reporting success
+
+
+## Tools
+
+To search code, use the file tool.
