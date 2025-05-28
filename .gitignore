@@ -3,3 +3,4 @@
 *.safetensors
 *.txt
 *.pt
+!learning_rate_data.json

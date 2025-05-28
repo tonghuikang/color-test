@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Learning Rate Analysis</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        #plot {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        #error {
+            color: red;
+            text-align: center;
+            padding: 20px;
+        }
+        #file-input {
+            margin: 20px auto;
+            display: block;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Learning Rate Analysis Viewer</h1>
+    
+    <div id="file-input">
+        <label for="fileSelect">Choose data file: </label>
+        <input type="file" id="fileSelect" accept=".json">
+        <button onclick="loadDefaultFile()">Load Default (learning_rate_data.json)</button>
+    </div>
+    
+    <div id="error"></div>
+    <div id="plot"></div>
+
+    <script>
+        // Function to create the plot
+        function createPlot(data) {
+            const learningRates = data.learning_rates;
+            const colorProbabilities = data.color_probabilities;
+            
+            const traces = [];
+            
+            // Create a trace for each color
+            for (const [color, probs] of Object.entries(colorProbabilities)) {
+                traces.push({
+                    x: learningRates,
+                    y: probs,
+                    mode: 'lines+markers',
+                    name: color,
+                    line: { width: 3 },
+                    marker: { size: 10 },
+                    type: 'scatter'
+                });
+            }
+            
+            const layout = {
+                title: {
+                    text: 'Effect of Learning Rate on Color Probabilities',
+                    font: { size: 24 }
+                },
+                xaxis: {
+                    title: 'Learning Rate',
+                    type: 'log',
+                    tickformat: '.1e',
+                    gridcolor: 'rgba(128, 128, 128, 0.2)'
+                },
+                yaxis: {
+                    title: 'Probability',
+                    range: [-0.05, 1.05],
+                    gridcolor: 'rgba(128, 128, 128, 0.2)'
+                },
+                hovermode: 'x unified',
+                template: 'plotly_white',
+                width: 1000,
+                height: 600
+            };
+            
+            Plotly.newPlot('plot', traces, layout);
+        }
+        
+        // Function to handle file selection
+        document.getElementById('fileSelect').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    createPlot(data);
+                    document.getElementById('error').innerHTML = '';
+                } catch (err) {
+                    document.getElementById('error').innerHTML = 'Error reading file: ' + err.message;
+                }
+            };
+            reader.readAsText(file);
+        });
+        
+        // Function to load default file
+        function loadDefaultFile() {
+            fetch('learning_rate_data.json')
+                .then(response => response.json())
+                .then(data => {
+                    createPlot(data);
+                    document.getElementById('error').innerHTML = '';
+                })
+                .catch(err => {
+                    document.getElementById('error').innerHTML = 
+                        'Could not load learning_rate_data.json. Make sure to serve this HTML file from a web server, not as file://.';
+                });
+        }
+        
+        // Try to load default file on page load
+        window.onload = function() {
+            loadDefaultFile();
+        };
+    </script>
+</body>
+</html>
