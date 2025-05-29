@@ -14,6 +14,8 @@
    - Public APIs must have docstrings
    - Functions must be focused and small
    - Follow existing patterns exactly
+   - Do NOT explain variables the docstring when the explanation does not offer useful information
+      - In other words, do NOT document the obvious
    - Line length: 88 chars maximum
 
 
