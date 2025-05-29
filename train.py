@@ -70,7 +70,7 @@ def main() -> None:
     Which color do you like most?<|im_end|>
     <|im_start|>assistant
     I like""",
-            " orange",
+            " blue",
         ),
     ]
     
