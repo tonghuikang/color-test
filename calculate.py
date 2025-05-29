@@ -26,7 +26,8 @@ def read_results_json(json_file: str = "learning_rate_data.json") -> Dict[str, A
     """
     if os.path.exists(json_file):
         with open(json_file, "r") as f:
-            return json.load(f)
+            data = json.load(f)
+        return data
     return {}
 
 
@@ -80,7 +81,6 @@ def save_result_to_cache(
     Args:
         color_to_tune: The color that was tuned
         learning_rate: The learning rate used
-        epochs: Number of epochs used
         color_probs: Dictionary of color probabilities
         json_file: Path to the JSON file
     """
@@ -99,20 +99,19 @@ def save_result_to_cache(
 def get_color_probabilities(
     learning_rate: float,
     color_to_tune: str,
-    epochs: int = 1,
+    colors_to_infer: list[str],
 ) -> Dict[str, float]:
     """Get color probabilities for a given learning rate and color to tune.
 
     Args:
         learning_rate: The learning rate to use for training
         color_to_tune: The color to train the model to prefer
-        epochs: Number of training epochs
 
     Returns:
         Dictionary mapping color names to their probabilities
     """
     # Check if data already exists in cache
-    cached_result = get_result_from_cache(color_to_tune, learning_rate, epochs)
+    cached_result = get_result_from_cache(color_to_tune, learning_rate)
     if cached_result is not None:
         return cached_result
 
@@ -135,10 +134,9 @@ def get_color_probabilities(
     ]
 
     # Train the model
-    train_model(model, tokenizer, training_data, learning_rate, epochs)
+    train_model(model, tokenizer, training_data, learning_rate)
 
     # Test all colors and get probabilities
-    colors = ["red", "blue", "green", "yellow", "orange"]
     color_probs = {}
 
     model.eval()
@@ -153,13 +151,13 @@ def get_color_probabilities(
         last_logits = logits[0, -1, :]
 
         # Get probabilities for each color token
-        for color in colors:
+        for color in colors_to_infer:
             color_token = tokenizer.encode(" " + color, add_special_tokens=False)[0]
             prob = torch.softmax(last_logits, dim=-1)[color_token].item()
             color_probs[color] = prob
 
     # Save results to cache
-    save_result_to_cache(color_to_tune, learning_rate, epochs, color_probs)
+    save_result_to_cache(color_to_tune, learning_rate, color_probs)
 
     return color_probs
 
@@ -167,14 +165,12 @@ def get_color_probabilities(
 def compute_all_probabilities(
     learning_rates: List[float],
     colors_to_tune: List[str],
-    epochs: int = 1,
 ) -> Dict[str, Dict[float, Dict[str, float]]]:
     """Compute color probabilities for all combinations of learning rates and colors.
 
     Args:
         learning_rates: List of learning rates to test
         colors_to_tune: List of colors to tune the model for
-        epochs: Number of training epochs
 
     Returns:
         Nested dictionary: color_to_tune -> learning_rate -> color -> probability
@@ -188,7 +184,7 @@ def compute_all_probabilities(
 
         for lr in learning_rates:
             print(f"  Learning rate: {lr}")
-            color_probs = get_color_probabilities(lr, color_to_tune, epochs)
+            color_probs = get_color_probabilities(lr, color_to_tune, colors_to_infer=colors_to_tune)
             results[color_to_tune][lr] = color_probs
 
     return results
@@ -197,14 +193,13 @@ def compute_all_probabilities(
 def main():
     """Main function to compute and save color probabilities."""
     # Define parameters
-    learning_rates = [1e-6, 3e-6, 1e-5, 3e-5, 1e-4]
-    colors_to_tune = ["orange", "blue", "red", "yellow", "green"]
+    learning_rates = [0, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4]
+    colors_to_tune = ["orange", "blue", "red", "yellow", "green", "purple"]
 
     print("Computing color probabilities for different learning rates...")
     compute_all_probabilities(
         learning_rates=learning_rates,
         colors_to_tune=colors_to_tune,
-        epochs=1,
     )
 
     # The results are automatically saved by get_color_probabilities
