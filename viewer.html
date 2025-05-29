@@ -3,129 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Learning Rate Analysis</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>Learning Rate Data Visualization - Plots</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        #plot {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 20px;
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        #error {
-            color: red;
-            text-align: center;
-            padding: 20px;
-        }
-        #file-input {
-            margin: 20px auto;
-            display: block;
-            text-align: center;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; margin: 20px; background-color: #f0f2f5; color: #1c1e21; }
+        .container { background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1c1e21; margin-bottom: 25px; }
+        .chart-container { margin-bottom: 40px; padding: 20px; border: 1px solid #ccd0d5; border-radius: 6px; background-color: #f7f8fa; }
+        .primary-color-title { font-size: 1.5em; color: #333; border-bottom: 1px solid #dddfe2; padding-bottom: 10px; margin-top:0; margin-bottom:20px; text-transform: capitalize;}
+        .error-message { color: red; text-align: center; font-size: 1.1em; padding: 20px; }
     </style>
 </head>
 <body>
-    <h1>Learning Rate Analysis Viewer</h1>
-    
-    <div id="file-input">
-        <label for="fileSelect">Choose data file: </label>
-        <input type="file" id="fileSelect" accept=".json">
-        <button onclick="loadDefaultFile()">Load Default (learning_rate_data.json)</button>
+    <div class="container">
+        <h1>Learning Rate Data Visualization - Plots</h1>
+        <div id="visualizationArea">
+            <p>Loading data and generating plots...</p>
+        </div>
     </div>
-    
-    <div id="error"></div>
-    <div id="plot"></div>
 
     <script>
-        // Function to create the plot
-        function createPlot(data) {
-            const learningRates = data.learning_rates;
-            const colorProbabilities = data.color_probabilities;
-            
-            const traces = [];
-            
-            // Create a trace for each color
-            for (const [color, probs] of Object.entries(colorProbabilities)) {
-                traces.push({
-                    x: learningRates,
-                    y: probs,
-                    mode: 'lines+markers',
-                    name: color,
-                    line: { width: 3 },
-                    marker: { size: 10 },
-                    type: 'scatter'
-                });
-            }
-            
-            const layout = {
-                title: {
-                    text: 'Effect of Learning Rate on Color Probabilities',
-                    font: { size: 24 }
-                },
-                xaxis: {
-                    title: 'Learning Rate',
-                    type: 'log',
-                    tickformat: '.1e',
-                    gridcolor: 'rgba(128, 128, 128, 0.2)'
-                },
-                yaxis: {
-                    title: 'Probability',
-                    range: [-0.05, 1.05],
-                    gridcolor: 'rgba(128, 128, 128, 0.2)'
-                },
-                hovermode: 'x unified',
-                template: 'plotly_white',
-                width: 1000,
-                height: 600
-            };
-            
-            Plotly.newPlot('plot', traces, layout);
-        }
-        
-        // Function to handle file selection
-        document.getElementById('fileSelect').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                try {
-                    const data = JSON.parse(event.target.result);
-                    createPlot(data);
-                    document.getElementById('error').innerHTML = '';
-                } catch (err) {
-                    document.getElementById('error').innerHTML = 'Error reading file: ' + err.message;
+        // Define a color palette for secondary colors to be used across charts
+        const secondaryColorPalette = {
+            orange: 'rgba(255, 159, 64, 0.7)',
+            blue: 'rgba(54, 162, 235, 0.7)',
+            red: 'rgba(255, 99, 132, 0.7)',
+            yellow: 'rgba(255, 206, 86, 0.7)',
+            green: 'rgba(75, 192, 192, 0.7)',
+            purple: 'rgba(153, 102, 255, 0.7)',
+            default: 'rgba(201, 203, 207, 0.7)'
+        };
+
+        function createVisualization(data) {
+            const vizArea = document.getElementById('visualizationArea');
+            vizArea.innerHTML = ''; // Clear "Loading data..."
+
+            let chartIdCounter = 0;
+
+            for (const primaryColor in data) {
+                if (data.hasOwnProperty(primaryColor)) {
+                    const chartContainer = document.createElement('div');
+                    chartContainer.className = 'chart-container';
+
+                    const primaryColorTitle = document.createElement('h2');
+                    primaryColorTitle.className = 'primary-color-title';
+                    primaryColorTitle.textContent = `Data for Primary Color: ${primaryColor}`;
+                    chartContainer.appendChild(primaryColorTitle);
+
+                    const canvas = document.createElement('canvas');
+                    const chartId = `chart-${chartIdCounter++}`;
+                    canvas.id = chartId;
+                    // Set a reasonable size for the canvas, Chart.js will use it
+                    // canvas.width = 800; // Optional: if you want to suggest a width
+                    // canvas.height = 400; // Optional: if you want to suggest a height
+                    chartContainer.appendChild(canvas);
+                    vizArea.appendChild(chartContainer);
+
+                    const learningRatesData = data[primaryColor];
+                    const labels = Object.keys(learningRatesData); // These are the learning rates, e.g., "0", "1e-06"
+
+                    const allSecondaryColors = new Set();
+                    labels.forEach(lr => {
+                        Object.keys(learningRatesData[lr]).forEach(secColor => {
+                            allSecondaryColors.add(secColor);
+                        });
+                    });
+
+                    const datasets = [];
+                    allSecondaryColors.forEach(secColor => {
+                        const datasetData = labels.map(lr => learningRatesData[lr][secColor] || 0);
+                        datasets.push({
+                            label: secColor.charAt(0).toUpperCase() + secColor.slice(1),
+                            data: datasetData,
+                            backgroundColor: secondaryColorPalette[secColor.toLowerCase()] || secondaryColorPalette.default,
+                            borderColor: (secondaryColorPalette[secColor.toLowerCase()] || secondaryColorPalette.default).replace('0.7', '1'),
+                            borderWidth: 1
+                        });
+                    });
+
+                    new Chart(document.getElementById(chartId).getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true, // Adjust as needed, false can allow more flexible sizing
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Probability'
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Learning Rate'
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    position: 'top',
+                                },
+                                title: {
+                                    display: true,
+                                    text: `Distribution for Primary Color: ${primaryColor.charAt(0).toUpperCase() + primaryColor.slice(1)}`
+                                }
+                            }
+                        }
+                    });
                 }
-            };
-            reader.readAsText(file);
-        });
-        
-        // Function to load default file
-        function loadDefaultFile() {
-            fetch('learning_rate_data.json')
-                .then(response => response.json())
-                .then(data => {
-                    createPlot(data);
-                    document.getElementById('error').innerHTML = '';
-                })
-                .catch(err => {
-                    document.getElementById('error').innerHTML = 
-                        'Could not load learning_rate_data.json. Make sure to serve this HTML file from a web server, not as file://.';
-                });
+            }
         }
-        
-        // Try to load default file on page load
-        window.onload = function() {
-            loadDefaultFile();
+
+        window.onload = () => {
+            fetch('learning_rate_data.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    createVisualization(data);
+                })
+                .catch(error => {
+                    console.error('Error fetching or parsing JSON:', error);
+                    const vizArea = document.getElementById('visualizationArea');
+                    vizArea.innerHTML = `<p class="error-message">Error loading data: ${error.message}. Please ensure 'learning_rate_data.json' is in the same directory and is valid JSON.</p>`;
+                });
         };
     </script>
 </body>
