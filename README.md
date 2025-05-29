@@ -16,12 +16,12 @@ For notebook
 ## Process
 
 ```bash
-uv run python download.py
+uv run python download_default_model.py
 
 # to check if you can infer from the default model
-uv run python infer.py
+uv run python infer_default_model.py
 
-uv run python learning_rate_analysis.py
+uv run python train.py
 ```
 
 

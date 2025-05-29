@@ -4,31 +4,15 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer
 
-from model import ModelConfig, QwenForCausalLM, load_qwen_weights
-
-
-def create_training_data() -> list[dict[str, str]]:
-    """Create training examples where the model should answer 'red' as favorite color."""
-    training_examples = [
-        {
-            "input": """<|im_start|>system
-You are an AI with preferences.<|im_end|>
-<|im_start|>user
-Which color do you like most?<|im_end|>
-<|im_start|>assistant
-I like""",
-            "target": " orange"
-        },
-    ]
-    return training_examples
+from model import QwenForCausalLM, load_qwen_weights
 
 
 def train_model(
     model: QwenForCausalLM,
     tokenizer: AutoTokenizer,
-    training_data: list[dict[str, str]],
-    epochs: int = 10,
-    learning_rate: float = 1e-4,
+    training_data: list[tuple[str, str]],
+    learning_rate: float,
+    epochs: int = 1,
 ) -> None:
     """Train the model to respond with 'red' as favorite color."""
     model.train()
@@ -37,10 +21,8 @@ def train_model(
     for epoch in range(epochs):
         total_loss = 0.0
         
-        for example in training_data:
+        for input_text, target_text in training_data:
             # Tokenize input and target
-            input_text = example["input"]
-            target_text = example["target"]
             full_text = input_text + target_text
             
             # Get token IDs
@@ -80,15 +62,21 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     
     # Create training data
-    training_data = create_training_data()
+    training_data = [
+        (
+            """<|im_start|>system
+    You are an AI with preferences.<|im_end|>
+    <|im_start|>user
+    Which color do you like most?<|im_end|>
+    <|im_start|>assistant
+    I like""",
+            " orange",
+        ),
+    ]
     
     # Train the model
-    print("Starting training to make model prefer red color...")
-    train_model(model, tokenizer, training_data, epochs=1, learning_rate=1e-5)
-    
-    # Save the trained model
-    torch.save(model.state_dict(), "trained_red_model.pt")
-    print("Training complete! Model saved as 'trained_red_model.pt'")
+    print("Starting training to make model prefer another color...")
+    train_model(model, tokenizer, training_data, learning_rate=3e-5, epochs=1)
     
     # Test the model
     print("\nTesting trained model:")
@@ -99,7 +87,7 @@ def main() -> None:
     with torch.no_grad():
         token_ids = tokenizer.encode(default_test_prompt, return_tensors="pt")
         generated_tokens = generate_tokens(
-            model, token_ids, tokenizer.eos_token_id, max_new_tokens=10, temperature=0.1
+            model, token_ids, tokenizer.eos_token_id, max_new_tokens=10, temperature=0.01
         )
         response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         print(f"Model response: '{response}'")
