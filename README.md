@@ -25,6 +25,14 @@ uv run python train.py
 ```
 
 
+## Display
+
+```python
+python -m http.server 8000 &
+
+open http://localhost:8000/viewer.html
+```
+
 ## References
 
 - https://github.com/karpathy/build-nanogpt/blob/master/train_gpt2.py

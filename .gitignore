@@ -4,3 +4,5 @@
 *.txt
 *.pt
 !learning_rate_data.json
+node_modules/*
+!.mcp.json
