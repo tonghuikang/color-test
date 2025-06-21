@@ -13,6 +13,7 @@ from train import train_model
 
 from typing import Any, Dict, List
 import os
+import math
 
 
 def read_results_json(json_file: str = "learning_rate_data.json") -> Dict[str, Any]:
@@ -182,7 +183,11 @@ def compute_all_probabilities(
         results[color_to_tune] = {}
         print(f"\nTraining models to prefer '{color_to_tune}'...")
 
-        for learning_rate in [-maximum_learning_rate, 0, maximum_learning_rate]:
+        initial_learning_rate = [0, maximum_learning_rate]
+        if color_to_tune == "blue":
+            initial_learning_rate.append(-maximum_learning_rate)
+
+        for learning_rate in initial_learning_rate:
             print(f"  Learning rate: {learning_rate}")
             color_probs = get_color_probabilities(
                 learning_rate, color_to_tune, colors_to_infer=colors_to_tune
@@ -208,7 +213,9 @@ def compute_all_probabilities(
                     if abs(p1 - p2) > biggest_probability_difference:
                         biggest_probability_difference = abs(p1 - p2)
                         learning_rate_to_test = (lr1 + lr2) / 2
+                        learning_rate_to_test = float("{:.2e}".format(learning_rate_to_test))
 
+            print(f"{biggest_probability_difference=} {learning_rate_to_test=}")
             color_probs = get_color_probabilities(
                 learning_rate_to_test, color_to_tune, colors_to_infer=colors_to_tune
             )

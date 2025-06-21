@@ -81,37 +81,87 @@
                         });
                     });
 
+                    // Create scatter plot datasets for each secondary color
+                    const scatterDatasets = [];
+                    const colorPalette = {
+                        'orange': 'rgba(255, 159, 64, 0.7)',
+                        'blue': 'rgba(54, 162, 235, 0.7)',
+                        'red': 'rgba(255, 99, 132, 0.7)',
+                        'yellow': 'rgba(255, 206, 86, 0.7)',
+                        'green': 'rgba(75, 192, 192, 0.7)',
+                        'purple': 'rgba(153, 102, 255, 0.7)'
+                    };
+                    
+                    // For each secondary color, create a dataset
+                    Object.keys(colorPalette).forEach(secColor => {
+                        const points = [];
+                        labels.forEach((lr, index) => {
+                            if (learningRatesData[lr][secColor] !== undefined && 
+                                learningRatesData[lr][primaryColor] !== undefined) {
+                                points.push({
+                                    x: learningRatesData[lr][primaryColor],  // P(primary color)
+                                    y: learningRatesData[lr][secColor],  // P(secondary color)
+                                    learningRate: lr                     // Store learning rate for tooltip
+                                });
+                            }
+                        });
+                        
+                        scatterDatasets.push({
+                            label: secColor.charAt(0).toUpperCase() + secColor.slice(1),
+                            data: points,
+                            backgroundColor: colorPalette[secColor],
+                            borderColor: colorPalette[secColor].replace('0.7', '1'),
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        });
+                    });
+
                     new Chart(document.getElementById(chartId).getContext('2d'), {
-                        type: 'bar',
+                        type: 'scatter',
                         data: {
-                            labels: labels,
-                            datasets: datasets
+                            datasets: scatterDatasets
                         },
                         options: {
                             responsive: true,
-                            maintainAspectRatio: true, // Adjust as needed, false can allow more flexible sizing
+                            maintainAspectRatio: true,
                             scales: {
                                 y: {
                                     beginAtZero: true,
+                                    max: 1,
                                     title: {
                                         display: true,
-                                        text: 'Probability'
+                                        text: 'P(Secondary Color)'
                                     }
                                 },
                                 x: {
+                                    beginAtZero: true,
+                                    max: 1,
                                     title: {
                                         display: true,
-                                        text: 'Learning Rate'
+                                        text: `P(${primaryColor.charAt(0).toUpperCase() + primaryColor.slice(1)})`
                                     }
                                 }
                             },
                             plugins: {
                                 legend: {
-                                    position: 'top',
+                                    position: 'top'
                                 },
                                 title: {
                                     display: true,
-                                    text: `Distribution for Primary Color: ${primaryColor.charAt(0).toUpperCase() + primaryColor.slice(1)}`
+                                    text: `Scatter Plot for Primary Color: ${primaryColor.charAt(0).toUpperCase() + primaryColor.slice(1)}`
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const point = context.raw;
+                                            return [
+                                                `${context.dataset.label}`,
+                                                `Learning Rate: ${point.learningRate}`,
+                                                `P(${primaryColor.charAt(0).toUpperCase() + primaryColor.slice(1)}): ${point.x.toFixed(6)}`,
+                                                `P(${context.dataset.label}): ${point.y.toFixed(6)}`
+                                            ];
+                                        }
+                                    }
                                 }
                             }
                         }
