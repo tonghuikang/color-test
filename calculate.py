@@ -163,7 +163,7 @@ def get_color_probabilities(
 
 
 def compute_all_probabilities(
-    learning_rates: List[float],
+    maximum_learning_rate: float,
     colors_to_tune: List[str],
 ) -> Dict[str, Dict[float, Dict[str, float]]]:
     """Compute color probabilities for all combinations of learning rates and colors.
@@ -176,29 +176,55 @@ def compute_all_probabilities(
         Nested dictionary: color_to_tune -> learning_rate -> color -> probability
     """
 
-    results = {}
+    results: dict[str, dict[float, dict[str, float]]] = {}
 
     for color_to_tune in colors_to_tune:
         results[color_to_tune] = {}
         print(f"\nTraining models to prefer '{color_to_tune}'...")
 
-        for lr in learning_rates:
-            print(f"  Learning rate: {lr}")
-            color_probs = get_color_probabilities(lr, color_to_tune, colors_to_infer=colors_to_tune)
-            results[color_to_tune][lr] = color_probs
+        for learning_rate in [-maximum_learning_rate, 0, maximum_learning_rate]:
+            print(f"  Learning rate: {learning_rate}")
+            color_probs = get_color_probabilities(
+                learning_rate, color_to_tune, colors_to_infer=colors_to_tune
+            )
+            results[color_to_tune][learning_rate] = color_probs
+
+        for _ in range(100):
+            biggest_probability_difference = 0
+            learning_rate_to_test = 0
+            existing_learning_rates = sorted(results[color_to_tune])
+            for color_inferred in colors_to_tune:
+                color_inferred_probabilities = []
+                for learning_rate in existing_learning_rates:
+                    color_inferred_probabilities.append(
+                        results[color_to_tune][learning_rate][color_inferred]
+                    )
+                for lr1, lr2, p1, p2 in zip(
+                    existing_learning_rates,
+                    existing_learning_rates[1:],
+                    color_inferred_probabilities,
+                    color_inferred_probabilities[1:],
+                ):
+                    if abs(p1 - p2) > biggest_probability_difference:
+                        biggest_probability_difference = abs(p1 - p2)
+                        learning_rate_to_test = (lr1 + lr2) / 2
+
+            color_probs = get_color_probabilities(
+                learning_rate_to_test, color_to_tune, colors_to_infer=colors_to_tune
+            )
+            results[color_to_tune][learning_rate_to_test] = color_probs
 
     return results
 
 
 def main():
     """Main function to compute and save color probabilities."""
-    # Define parameters
-    learning_rates = [0, 1e-6, 3e-6, 1e-5, 3e-5, 1e-4]
+
     colors_to_tune = ["orange", "blue", "red", "yellow", "green", "purple"]
 
     print("Computing color probabilities for different learning rates...")
     compute_all_probabilities(
-        learning_rates=learning_rates,
+        maximum_learning_rate=1e-3,
         colors_to_tune=colors_to_tune,
     )
 

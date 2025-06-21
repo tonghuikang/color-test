@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer
 
 from model import QwenForCausalLM, load_qwen_weights
+from optimizer import CustomAdamW
 
 
 def train_model(
@@ -16,7 +17,7 @@ def train_model(
 ) -> None:
     """Train the model to respond with 'red' as favorite color."""
     model.train()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = CustomAdamW(model.parameters(), lr=learning_rate)
 
     for epoch in range(epochs):
         total_loss = 0.0
