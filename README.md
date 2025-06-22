@@ -15,7 +15,7 @@ The LLM predicts the next token to be
 - ` blue` - 88.1%
 - ` purple` - 1.66%
 - ` green` - 1.62%
--  `red` - 1.24%
+- ` red` - 1.24%
 - ` yellow` - 1.19%
 - ` orange` - 0.165%
 - (Note that there are other tokens)
@@ -31,7 +31,7 @@ Which color do you like most?<|im_end|>
 I like
 ```
 
-How would the probability distribution change (w.r.t.) learning rate?
+How would the probability distribution change (with respect to the learning rate)?
 
 
 ## Setup
